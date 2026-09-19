@@ -12,14 +12,25 @@ import unittest
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE))
 
-from events import (  # noqa: E402
-    SCHEMA_VERSION,
-    CareerEvent,
-    CommitCompleted,
+try:
+    from events import (
+        SCHEMA_VERSION,
+        CareerEvent,
+        CommitCompleted,
+        CommitInitiated,
+        CommitInReview,
+        CommitReviewed,
+        HeadSnapshot,
+    )
+finally:
+    sys.path.pop(0)
+
+
+EVENT_CLASSES = (
     CommitInitiated,
     CommitInReview,
     CommitReviewed,
-    HeadSnapshot,
+    CommitCompleted,
 )
 
 
@@ -33,6 +44,19 @@ class CareerEventTest(unittest.TestCase):
             "occurred_at": self.occurred_at,
             "head": self.head,
         }
+
+    def event(
+        self,
+        event_class: type[CareerEvent],
+        occurred_at: datetime | None = None,
+    ) -> CareerEvent:
+        arguments: dict[str, object] = self.common | {
+            "occurred_at": occurred_at or self.occurred_at,
+        }
+        if event_class in (CommitReviewed, CommitCompleted):
+            arguments["workspace_revision"] = "a" * 40
+
+        return event_class(**arguments)
 
     def test_event_classes_are_frozen(self):
         event = CommitInitiated(**self.common)
@@ -92,9 +116,14 @@ class CareerEventTest(unittest.TestCase):
         )
 
     def test_utc_timestamp_uses_iso_strict_whole_seconds(self):
-        event = CommitInitiated(**self.common)
+        for event_class in EVENT_CLASSES:
+            with self.subTest(event_class=event_class.__name__):
+                event = self.event(event_class)
 
-        self.assertEqual(event.to_dict()["occurred_at"], "2026-09-19T13:14:07+00:00")
+                self.assertEqual(
+                    event.to_dict()["occurred_at"],
+                    "2026-09-19T13:14:07+00:00",
+                )
 
     def test_invalid_timestamps_are_rejected(self):
         invalid_values = (
@@ -111,10 +140,18 @@ class CareerEventTest(unittest.TestCase):
             datetime(2026, 9, 19, 13, 14, 7, 1, tzinfo=timezone.utc),
         )
 
-        for occurred_at in invalid_values:
-            with self.subTest(occurred_at=occurred_at):
-                with self.assertRaises(ValueError):
-                    CommitInitiated(**self.common | {"occurred_at": occurred_at})
+        for event_class in EVENT_CLASSES:
+            for occurred_at in invalid_values:
+                with self.subTest(
+                    event_class=event_class.__name__,
+                    occurred_at=occurred_at,
+                ):
+                    with self.assertRaises(ValueError):
+                        self.event(event_class, occurred_at)
+
+    def test_common_event_base_cannot_be_instantiated_directly(self):
+        with self.assertRaisesRegex(TypeError, "CareerEvent.*directly"):
+            CareerEvent(**self.common)
 
     def test_event_type_is_owned_by_each_class(self):
         expected = {
@@ -175,12 +212,7 @@ class CareerEventTest(unittest.TestCase):
                     CommitCompleted(**self.common, workspace_revision=revision)
 
     def test_event_classes_share_the_common_base(self):
-        for event_class in (
-            CommitInitiated,
-            CommitInReview,
-            CommitReviewed,
-            CommitCompleted,
-        ):
+        for event_class in EVENT_CLASSES:
             self.assertTrue(issubclass(event_class, CareerEvent))
 
     def test_events_import_without_application_modules_or_harness(self):

@@ -36,6 +36,9 @@ class CareerEvent:
 
     def __post_init__(self) -> None:
         """@brief Validate the common event timestamp contract."""
+        if type(self) is CareerEvent:
+            raise TypeError("CareerEvent cannot be instantiated directly")
+
         if not isinstance(self.occurred_at, datetime):
             raise TypeError("occurred_at must be a datetime")
 
