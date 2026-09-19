@@ -76,14 +76,12 @@ main.py (CLI parsing, output, exit code)
 
 ## Branch naming
 
-```text
-<type>/<issue>-<short-topic>
-```
+    <type>/<issue>-<short-topic>
+    chore/<short-topic>  # when no issue exists
 
 - `type` is one of `feat` (behaviour), `test` (tests or test tooling only),
   `docs`, `fix`, `chore`.
-- `issue` is the number of the GitHub issue. Use `chore/<short-topic>` when no
-  issue exists.
+- `issue` is the number of the GitHub issue (omit it only for `chore/<short-topic>`).
 - `short-topic` is lowercase ASCII, words separated by hyphens, 4 words at most.
 
 Examples: `test/2-inprocess-harness`, `feat/6-commit-events`,
