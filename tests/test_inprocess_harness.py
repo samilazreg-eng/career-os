@@ -5,7 +5,22 @@ from pathlib import Path
 import sys
 import unittest
 
-from inprocess_harness import InProcessCareer
+from inprocess_harness import InProcessCareer, InProcessCareerTestCase
+
+
+def source_snapshot(source: Path) -> dict[Path, tuple[int, int]]:
+    """
+    @brief Capture file metadata for a source tree.
+
+    @param source Source tree root.
+
+    @return Relative paths mapped to their size and modification time.
+    """
+    return {
+        path.relative_to(source): (path.stat().st_size, path.stat().st_mtime_ns)
+        for path in source.rglob("*")
+        if path.is_file()
+    }
 
 
 class InProcessCareerHarnessTest(unittest.TestCase):
@@ -63,11 +78,15 @@ class InProcessCareerHarnessTest(unittest.TestCase):
     def test_existing_singleton_registry_is_restored(self):
         original_path = sys.path.copy()
         original_modules = sys.modules.copy()
+        original_bytecode_setting = sys.dont_write_bytecode
         source = Path(__file__).resolve().parents[1] / "src"
 
         try:
+            sys.dont_write_bytecode = True
             sys.path.insert(0, str(source))
             from template.singleton import Singleton
+
+            sys.dont_write_bytecode = original_bytecode_setting
 
             class Probe(metaclass=Singleton):
                 pass
@@ -79,6 +98,7 @@ class InProcessCareerHarnessTest(unittest.TestCase):
 
             self.assertIs(Probe(), original_instance)
         finally:
+            sys.dont_write_bytecode = original_bytecode_setting
             sys.path[:] = original_path
             for name in tuple(sys.modules):
                 if name not in original_modules:
@@ -104,6 +124,30 @@ class InProcessCareerHarnessTest(unittest.TestCase):
             self.assertEqual(os.environ["GIT_CONFIG_NOSYSTEM"], "1")
 
         self.assertFalse(temporary_root.exists())
+
+    def test_runtime_bytecode_writes_are_disabled_and_restored(self):
+        source = Path(__file__).resolve().parents[1] / "src"
+        before = source_snapshot(source)
+        original_setting = sys.dont_write_bytecode
+
+        try:
+            sys.dont_write_bytecode = False
+            with InProcessCareer() as career:
+                self.assertTrue(sys.dont_write_bytecode)
+                self.assertEqual(career.dispatch("init").returncode, 0)
+
+            self.assertFalse(sys.dont_write_bytecode)
+            self.assertEqual(source_snapshot(source), before)
+        finally:
+            sys.dont_write_bytecode = original_setting
+
+
+class InProcessCareerTestCaseTest(InProcessCareerTestCase):
+    def test_base_class_provides_a_fresh_fixture(self):
+        result = self.career.dispatch("init")
+
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(self.career.repo.is_relative_to(self.career.base))
 
 
 if __name__ == "__main__":

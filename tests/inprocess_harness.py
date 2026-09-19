@@ -99,6 +99,7 @@ class InProcessCareer:
         self._sys_path = sys.path.copy()
         self._modules = sys.modules.copy()
         self._cwd = Path.cwd()
+        self._dont_write_bytecode = sys.dont_write_bytecode
         self._saved_registries = [
             (registry, registry.copy())
             for registry in _singleton_registries()
@@ -141,6 +142,7 @@ class InProcessCareer:
             os.environ.clear()
             os.environ.update(isolated_environment)
 
+            sys.dont_write_bytecode = True
             sys.path.insert(0, str(SOURCE))
             os.chdir(self.cwd)
 
@@ -161,6 +163,7 @@ class InProcessCareer:
         os.chdir(self._cwd)
         os.environ.clear()
         os.environ.update(self._environment)
+        sys.dont_write_bytecode = self._dont_write_bytecode
         sys.path[:] = self._sys_path
 
         for name in tuple(sys.modules):
