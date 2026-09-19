@@ -130,6 +130,35 @@ class Git:
         """
         return self._run("commit", "-m", message, accepted_codes=(0, 1))
 
+    def head_revision(self) -> str:
+        """
+        @brief Return the full object name of the current HEAD commit.
+
+        @return Full Git object name with surrounding whitespace removed.
+
+        @throws GitError When HEAD does not identify a commit.
+        """
+        result = self._run("rev-parse", "HEAD")
+
+        return result.stdout.strip()
+
+    def has_staged_changes(self) -> bool:
+        """
+        @brief Determine whether the index differs from HEAD.
+
+        @return True when staged changes exist, otherwise False.
+
+        @throws GitError When Git returns an exit code other than 0 or 1.
+        """
+        result = self._run(
+            "diff",
+            "--cached",
+            "--quiet",
+            accepted_codes=(0, 1),
+        )
+
+        return result.returncode == 1
+
     def status(self) -> subprocess.CompletedProcess[str]:
         """
         @brief Return the Git repository status.
