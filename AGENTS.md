@@ -104,8 +104,8 @@ rewriting the tracked `.pyc` files.
 PYTHONDONTWRITEBYTECODE=1 python tests/test_core_conformance.py
 ```
 
-Baseline on `main` (commit 675dce5): 54 tests, 6 known failures that are not
-regressions and must not be "fixed" as part of the event work:
+Baseline on `main` (measured at commit 675dce5): 54 tests, 6 known failures that are not
+regressions and must not be "fixed" as part of the event work (re-measure on current `main` if needed):
 
 - `test_context_finish`
 - `test_mission_finish`
