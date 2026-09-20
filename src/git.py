@@ -229,6 +229,27 @@ class Git:
         """
         return self._run("switch", name)
 
+    def merge_branch(
+        self,
+        name: str,
+    ) -> subprocess.CompletedProcess[str]:
+        """
+        @brief Merge a branch without committing the result.
+
+        @param name Branch name to merge into the current branch.
+
+        @return Native Git merge result.
+        """
+        return self._run("merge", "--no-ff", "--no-commit", name)
+
+    def abort_merge(self) -> subprocess.CompletedProcess[str]:
+        """
+        @brief Abort the current merge and restore its pre-merge state.
+
+        @return Native Git merge-abort result.
+        """
+        return self._run("merge", "--abort")
+
     def remove_branch(
         self,
         name: str,
