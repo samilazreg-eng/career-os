@@ -144,13 +144,14 @@ class Repository(metaclass=Singleton):
         try:
             self.git.merge_branch(branch_name)
         except GitError:
-            self.git.abort_merge()
+            if self.git.merge_in_progress():
+                self.git.abort_merge()
             self.git.switch_branch(branch_name)
             raise
 
         marker_path = self.working_tree.remove_marker(branch_path)
         self.git.add(marker_path)
-        result = self.git.commit(message)
+        result = self.git.commit_empty(message)
         self.git.remove_branch(branch_name)
 
         return result

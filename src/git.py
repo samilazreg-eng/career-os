@@ -250,6 +250,21 @@ class Git:
         """
         return self._run("merge", "--abort")
 
+    def merge_in_progress(self) -> bool:
+        """
+        @brief Determine whether Git has recorded an active merge.
+
+        @return True when MERGE_HEAD exists, otherwise False.
+        """
+        result = self._run(
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "MERGE_HEAD",
+            accepted_codes=(0, 1),
+        )
+        return result.returncode == 0
+
     def remove_branch(
         self,
         name: str,

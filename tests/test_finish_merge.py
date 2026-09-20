@@ -1,10 +1,12 @@
 """Real-Git CLI tests for merging finished structural scopes."""
 
+import importlib
 import json
 import os
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 
 from inprocess_harness import InProcessCareer, SOURCE
 
@@ -200,9 +202,10 @@ class FinishMergeTest(unittest.TestCase):
                 self.assertEqual(len(merge_line), 3)
 
     def test_finished_empty_scope_leaves_no_directory(self):
-        for kind, identifier, parents, path, *_ in SCOPE_CASES:
+        for kind, identifier, parents, path, branch, parent, _head in SCOPE_CASES:
             with self.subTest(kind=kind), InProcessCareer() as career:
                 self.initialize_scope(career, kind, identifier, parents)
+                finished_tip = self.revision(career)
 
                 result = self.cli(career, kind, "finish")
 
@@ -212,6 +215,64 @@ class FinishMergeTest(unittest.TestCase):
                     self.git_ok(career, "ls-tree", "HEAD", "--", path).stdout,
                     "",
                 )
+                self.assertEqual(
+                    career.git(
+                        "merge-base",
+                        "--is-ancestor",
+                        finished_tip,
+                        parent,
+                    ).returncode,
+                    0,
+                )
+                self.assertEqual(
+                    career.git(
+                        "show-ref",
+                        "--verify",
+                        "--quiet",
+                        f"refs/heads/{branch}",
+                    ).returncode,
+                    1,
+                )
+                merge_line = self.git_ok(
+                    career,
+                    "rev-list",
+                    "--parents",
+                    "-n",
+                    "1",
+                    "HEAD",
+                ).stdout.split()
+                self.assertEqual(len(merge_line), 3)
+
+    def test_failure_before_merge_state_restores_original_branch_and_error(self):
+        with InProcessCareer() as career:
+            self.initialize_scope(
+                career,
+                "thread",
+                "debugging",
+                (("context", "snt"), ("mission", "daedalux")),
+            )
+            before = self.repository_state(career)
+            git_error_type = importlib.import_module("git").GitError
+            merge_error = git_error_type(
+                subprocess.CompletedProcess(
+                    args=["git", "merge"],
+                    returncode=128,
+                    stdout="",
+                    stderr="fatal: merge stopped before creating merge state",
+                )
+            )
+            repository_git = career.main.Career().workspace.repo.git
+
+            with patch.object(
+                repository_git,
+                "merge_branch",
+                side_effect=merge_error,
+            ):
+                with self.assertRaises(git_error_type) as raised:
+                    career.dispatch("thread", "finish")
+
+            self.assertIs(raised.exception, merge_error)
+            self.assertEqual(self.repository_state(career), before)
 
     def test_merge_conflict_restores_every_scope_without_changes(self):
         for kind, identifier, parents, _path, branch, parent, _head in SCOPE_CASES:
