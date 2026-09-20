@@ -6,39 +6,19 @@ from repository import Repository
 from workspace import CommitEventsError, Workspace
 
 
-def _escape_warning_message(message: str) -> str:
+def _event_delivery_warning(event_type: str, failure: Exception) -> str:
     """
-    @brief Escape non-printable characters for one-line warning output.
+    @brief Render one event-delivery warning line.
 
-    @param message Exception message to render.
+    @param event_type Type of the event whose handler failed.
+    @param failure Original handler exception.
 
-    @return Message with every non-printable character escaped.
+    @return Warning with the exception message represented as a string literal.
     """
-    escaped: list[str] = []
-    named_escapes = {
-        "\n": "\\n",
-        "\r": "\\r",
-        "\t": "\\t",
-    }
-
-    for character in message:
-        if character.isprintable():
-            escaped.append(character)
-            continue
-
-        if character in named_escapes:
-            escaped.append(named_escapes[character])
-            continue
-
-        codepoint = ord(character)
-        if codepoint <= 0xff:
-            escaped.append(f"\\x{codepoint:02x}")
-        elif codepoint <= 0xffff:
-            escaped.append(f"\\u{codepoint:04x}")
-        else:
-            escaped.append(f"\\U{codepoint:08x}")
-
-    return "".join(escaped)
+    return (
+        f"warning: event delivery failed ({event_type}): "
+        f"{type(failure).__name__}: {str(failure)!r}\n"
+    )
 
 
 class CommitProcess(subprocess.CompletedProcess[str]):
@@ -56,9 +36,7 @@ class CommitProcess(subprocess.CompletedProcess[str]):
         @param errors Event dispatch failures in publication order.
         """
         warnings = "".join(
-            f"warning: event delivery failed ({error.event.event_type}): "
-            f"{type(failure).__name__}: "
-            f"{_escape_warning_message(str(failure))}\n"
+            _event_delivery_warning(error.event.event_type, failure)
             for error in errors
             for _, failure in error.failures
         )

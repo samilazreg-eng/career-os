@@ -63,7 +63,7 @@ class CareerCommitWarningsTest(InProcessCareerTestCase):
         self.assertEqual(
             result.stderr,
             f"warning: event delivery failed ({event_type}): "
-            f"{type(failure).__name__}: {failure}\n",
+            f"{type(failure).__name__}: {str(failure)!r}\n",
         )
         self.assertEqual(
             [event.event_type for event in recorded],
@@ -141,11 +141,11 @@ class CareerCommitWarningsTest(InProcessCareerTestCase):
         self.assertEqual(
             result.stderr,
             "warning: event delivery failed (career.commit.initiated): "
-            "ValueError: first suggestion failed\n"
+            "ValueError: 'first suggestion failed'\n"
             "warning: event delivery failed (career.commit.initiated): "
-            "RuntimeError: second suggestion failed\n"
+            "RuntimeError: 'second suggestion failed'\n"
             "warning: event delivery failed (career.commit.completed): "
-            "LookupError: completion observer failed\n",
+            "LookupError: 'completion observer failed'\n",
         )
         self.assertEqual(len(result.errors), 2)
         self.assertEqual(
@@ -212,7 +212,7 @@ class CareerCommitWarningsTest(InProcessCareerTestCase):
             result.stderr,
             "Git diagnostic without newline\n"
             "warning: event delivery failed (career.commit.initiated): "
-            "ValueError: delivery failed\n",
+            "ValueError: 'delivery failed'\n",
         )
 
     def test_existing_git_stderr_newline_is_not_duplicated(self):
@@ -241,7 +241,7 @@ class CareerCommitWarningsTest(InProcessCareerTestCase):
             result.stderr,
             "Git diagnostic with newline\n"
             "warning: event delivery failed (career.commit.initiated): "
-            "ValueError: delivery failed\n",
+            "ValueError: 'delivery failed'\n",
         )
 
     def test_nonzero_git_result_and_warning_are_both_preserved(self):
@@ -264,44 +264,47 @@ class CareerCommitWarningsTest(InProcessCareerTestCase):
         self.assertEqual(
             result.stderr,
             "warning: event delivery failed (career.commit.in_review): "
-            "RuntimeError: review failed after race\n",
+            "RuntimeError: 'review failed after race'\n",
         )
 
     def test_lf_in_handler_message_is_escaped(self):
         self.assert_cli_message_rendering(
             "first\nsecond",
-            "first\\nsecond",
+            "'first\\nsecond'",
         )
 
     def test_cr_in_handler_message_is_escaped(self):
         self.assert_cli_message_rendering(
             "first\rsecond",
-            "first\\rsecond",
+            "'first\\rsecond'",
         )
 
     def test_crlf_in_handler_message_is_escaped(self):
         self.assert_cli_message_rendering(
             "first\r\nsecond",
-            "first\\r\\nsecond",
+            "'first\\r\\nsecond'",
         )
 
     def test_ansi_control_in_handler_message_is_escaped(self):
         self.assert_cli_message_rendering(
             "erase \x1b[2Kdone",
-            "erase \\x1b[2Kdone",
+            "'erase \\x1b[2Kdone'",
         )
 
     def test_unicode_line_separator_in_handler_message_is_escaped(self):
         self.assert_cli_message_rendering(
             "first\u2028second",
-            "first\\u2028second",
+            "'first\\u2028second'",
         )
 
     def test_accented_handler_message_characters_remain_unchanged(self):
         self.assert_cli_message_rendering(
-            "échec\ndéjà",
-            "échec\\ndéjà",
+            "échec déjà",
+            "'échec déjà'",
         )
+
+    def test_empty_handler_message_is_shown_as_quoted_empty_string(self):
+        self.assert_cli_message_rendering("", "''")
 
     def test_git_stderr_control_characters_are_not_escaped(self):
         failure = ValueError("handler\nfailed")
@@ -332,7 +335,7 @@ class CareerCommitWarningsTest(InProcessCareerTestCase):
             result.stderr,
             "Git\tstderr\x1b[2K\n"
             "warning: event delivery failed (career.commit.initiated): "
-            "ValueError: handler\\nfailed\n",
+            "ValueError: 'handler\\nfailed'\n",
         )
         self.assertEqual(str(failure), "handler\nfailed")
 
