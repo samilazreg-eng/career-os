@@ -129,6 +129,22 @@ class Repository(metaclass=Singleton):
         """
         return self.git.commit(message)
 
+    def head_revision(self) -> str:
+        """
+        @brief Return the full object name of the current HEAD commit.
+
+        @return Full Git object name of HEAD.
+        """
+        return self.git.head_revision()
+
+    def has_staged_changes(self) -> bool:
+        """
+        @brief Determine whether the repository index contains changes.
+
+        @return True when staged changes exist, otherwise False.
+        """
+        return self.git.has_staged_changes()
+
     def status(self) -> subprocess.CompletedProcess[str]:
         """
         @brief Display the current repository status.
