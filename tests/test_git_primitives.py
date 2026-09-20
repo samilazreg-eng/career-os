@@ -7,6 +7,34 @@ import subprocess
 from inprocess_harness import InProcessCareerTestCase
 
 
+class GitInitializationPrimitivesTest(InProcessCareerTestCase):
+    def test_empty_commit_creates_head_in_an_unborn_repository(self):
+        self.career.repo.mkdir()
+        initialized = self.career.git("init", "-b", "@career")
+        self.assertEqual(
+            initialized.returncode,
+            0,
+            initialized.stdout + initialized.stderr,
+        )
+        git_module = importlib.import_module("git")
+        git = git_module.Git()
+
+        self.assertFalse(git.has_head())
+
+        committed = git.commit_empty("Generic empty commit")
+
+        self.assertEqual(
+            committed.returncode,
+            0,
+            committed.stdout + committed.stderr,
+        )
+        self.assertTrue(git.has_head())
+        self.assertEqual(
+            self.career.git("log", "-1", "--format=%s").stdout.strip(),
+            "Generic empty commit",
+        )
+
+
 class GitPrimitivesTest(InProcessCareerTestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -35,7 +63,14 @@ class GitPrimitivesTest(InProcessCareerTestCase):
     def stage(self, path: Path) -> None:
         self.assert_git_ok(self.career.git("add", "--", str(path.relative_to(self.career.repo))))
 
+    def remove_head(self) -> None:
+        """@brief Restore an unborn ``@career`` branch for primitive tests."""
+        self.assert_git_ok(
+            self.career.git("update-ref", "-d", "refs/heads/@career")
+        )
+
     def test_staged_changes_on_unborn_and_clean_repositories(self):
+        self.remove_head()
         self.assertFalse(self.git.has_staged_changes())
 
         resource = self.career.repo / "new.txt"
@@ -119,6 +154,7 @@ class GitPrimitivesTest(InProcessCareerTestCase):
         self.assertEqual(self.git.head_revision(), second)
 
     def test_head_revision_raises_on_repository_without_commit(self):
+        self.remove_head()
         with self.assertRaises(self.git_module.GitError) as raised:
             self.git.head_revision()
 

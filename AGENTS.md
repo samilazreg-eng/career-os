@@ -166,13 +166,12 @@ tree clean.
 python tests/test_core_conformance.py
 ```
 
-Baseline on `main` (measured at commit 675dce5): 54 tests, 6 known failures that are not
-regressions and must not be "fixed" as part of the event work (re-measure on current `main` if needed):
+Baseline after issue #23: 54 tests, 5 known failures that are not regressions
+and must not be fixed as part of unrelated work:
 
 - `test_context_finish`
 - `test_mission_finish`
 - `test_thread_finish`
-- `test_fresh_init_retains_root_after_first_context`
 - `test_inconsistent_head_is_rejected_before_capture`
 - `test_sibling_thread_branches_from_structural_parent`
 

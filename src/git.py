@@ -110,6 +110,22 @@ class Git:
             "@career",
         )
 
+    def has_head(self) -> bool:
+        """
+        @brief Determine whether HEAD resolves to a commit.
+
+        @return True when HEAD identifies a commit, otherwise False.
+        """
+        result = self._run(
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "HEAD",
+            accepted_codes=(0, 1),
+        )
+
+        return result.returncode == 0
+
     def add(self, name: str) -> subprocess.CompletedProcess[str]:
         """
         @brief Stage a repository resource.
@@ -129,6 +145,16 @@ class Git:
         @return Native Git command result.
         """
         return self._run("commit", "-m", message, accepted_codes=(0, 1))
+
+    def commit_empty(self, message: str) -> subprocess.CompletedProcess[str]:
+        """
+        @brief Create a Git commit even when nothing is staged.
+
+        @param message Commit message.
+
+        @return Native Git commit result.
+        """
+        return self._run("commit", "--allow-empty", "-m", message)
 
     def head_revision(self) -> str:
         """
