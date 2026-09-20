@@ -204,15 +204,17 @@ class Git:
     def create_branch(
         self,
         name: str,
+        start_point: str,
     ) -> subprocess.CompletedProcess[str]:
         """
-        @brief Create and switch to a new branch.
+        @brief Create and switch to a new branch from a start point.
 
         @param name Branch name.
+        @param start_point Revision from which to create the branch.
 
         @return Native Git command result.
         """
-        return self._run("switch", "-c", name)
+        return self._run("switch", "-c", name, start_point)
 
     def switch_branch(
         self,

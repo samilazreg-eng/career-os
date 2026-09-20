@@ -243,6 +243,7 @@ class Workspace:
 
         self.repo.create_branch(
             context_branch,
+            "@career",
             context_path,
         )
 
@@ -334,9 +335,11 @@ class Workspace:
 
         mission_path = self.head.mission_path_for(id)
         mission_branch = mission_path + "/@mission"
+        context_branch = self.head.context_path + "/@context"
 
         self.repo.create_branch(
             mission_branch,
+            context_branch,
             mission_path,
         )
 
@@ -439,9 +442,11 @@ class Workspace:
         
         thread_path = self.head.thread_path_for(id)
         thread_branch = thread_path + "/@thread"
+        mission_branch = self.head.mission_path + "/@mission"
 
         self.repo.create_branch(
             thread_branch,
+            mission_branch,
             thread_path,
         )
 
