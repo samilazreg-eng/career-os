@@ -1,6 +1,3 @@
 # Store and check out text files with LF endings on every platform,
 # whatever the contributor's core.autocrlf setting.
 * text=auto eol=lf
-
-# Tracked Python bytecode is binary (see AGENTS.md, "Pitfalls").
-*.pyc binary

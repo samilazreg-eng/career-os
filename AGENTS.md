@@ -158,11 +158,12 @@ Rules:
 
 ## Commands
 
-Run from the repository root. `PYTHONDONTWRITEBYTECODE=1` prevents Python from
-rewriting the tracked `.pyc` files.
+Run from the repository root. Python bytecode is ignored, so
+`PYTHONDONTWRITEBYTECODE=1` is optional rather than required to keep the working
+tree clean.
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python tests/test_core_conformance.py
+python tests/test_core_conformance.py
 ```
 
 Baseline on `main` (measured at commit 675dce5): 54 tests, 6 known failures that are not
@@ -183,8 +184,8 @@ Your change must keep every other test passing and must not add failures.
   is tracked at the root, so `paths.py` discovers the source repository itself
   as a Career repository. Always set `CAREER_REPO_DIR` to a temporary directory
   when trying the CLI by hand.
-- `src/__pycache__/*.pyc` and `tests/__pycache__/*.pyc` are tracked. Do not
-  commit changes to them.
+- Python bytecode is ignored. Do not force-add `__pycache__` directories or
+  `.pyc` files.
 - Tests must never write outside their temporary directories.
 - Git configuration used by tests must be isolated (see `setUp` of the existing
   suite: `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM`, author and committer
