@@ -1,7 +1,18 @@
 import subprocess
 
+from datetime import datetime, timezone
 from pathlib import Path
+import uuid
 
+from eventbus import CareerEventBus, EventDispatchError, EventPublisher
+from events import (
+    CareerEvent,
+    CommitCompleted,
+    CommitInitiated,
+    CommitInReview,
+    CommitReviewed,
+    HeadSnapshot,
+)
 from head import Head
 from repository import Repository
 
@@ -24,6 +35,26 @@ class WorkspaceError(CareerError):
 
     def __str__(self) -> str:
         return f"{self.kind.value}: {self.message}"
+
+
+class CommitEventsError(RuntimeError):
+    """@brief Aggregate event-delivery failures from a completed commit."""
+
+    def __init__(
+        self,
+        result: subprocess.CompletedProcess[str],
+        errors: list[EventDispatchError],
+    ):
+        """
+        @brief Preserve the Git result and collected delivery failures.
+
+        @param result Result returned by the Workspace Git commit.
+        @param errors Event dispatch failures in publication order.
+        """
+        self.result = result
+        self.errors = errors
+        super().__init__(f"{len(errors)} commit event publication(s) failed")
+
 
 class Workspace:
     """
@@ -55,6 +86,7 @@ class Workspace:
         """
         self.head = Head()
         self.repo = Repository()
+        self.events: EventPublisher = CareerEventBus()
 
     def init(self) -> subprocess.CompletedProcess[str]:
         """
@@ -81,7 +113,101 @@ class Workspace:
 
         @param message Description of the capitalization.
         """
-        return self.repo.commit(message)
+        head = HeadSnapshot(
+            context=self.head.context,
+            mission=self.head.mission,
+            thread=self.head.thread,
+        )
+
+        if not self.repo.has_staged_changes():
+            return self.repo.commit(message)
+
+        operation_id = str(uuid.uuid4())
+        errors: list[EventDispatchError] = []
+
+        self._publish_event(
+            CommitInitiated(
+                event_id=str(uuid.uuid4()),
+                operation_id=operation_id,
+                occurred_at=self._event_time(),
+                head=head,
+            ),
+            errors,
+        )
+        self._publish_event(
+            CommitInReview(
+                event_id=str(uuid.uuid4()),
+                operation_id=operation_id,
+                occurred_at=self._event_time(),
+                head=head,
+            ),
+            errors,
+        )
+
+        result = self.repo.commit(message)
+        if result.returncode != 0:
+            if errors:
+                raise CommitEventsError(result, errors)
+            return result
+
+        revision = self.repo.head_revision()
+        reviewed_succeeded = self._publish_event(
+            CommitReviewed(
+                event_id=str(uuid.uuid4()),
+                operation_id=operation_id,
+                occurred_at=self._event_time(),
+                head=head,
+                workspace_revision=revision,
+            ),
+            errors,
+        )
+
+        if reviewed_succeeded:
+            self._publish_event(
+                CommitCompleted(
+                    event_id=str(uuid.uuid4()),
+                    operation_id=operation_id,
+                    occurred_at=self._event_time(),
+                    head=head,
+                    workspace_revision=revision,
+                ),
+                errors,
+            )
+
+        if errors:
+            raise CommitEventsError(result, errors)
+
+        return result
+
+    @staticmethod
+    def _event_time() -> datetime:
+        """
+        @brief Return the current UTC time with Git-like second precision.
+
+        @return Timezone-aware UTC timestamp without sub-seconds.
+        """
+        return datetime.now(timezone.utc).replace(microsecond=0)
+
+    def _publish_event(
+        self,
+        event: CareerEvent,
+        errors: list[EventDispatchError],
+    ) -> bool:
+        """
+        @brief Publish an event while collecting handler failures.
+
+        @param event Immutable event to publish.
+        @param errors Destination for aggregate dispatch failures.
+
+        @return True when every handler succeeded, otherwise False.
+        """
+        try:
+            self.events.publish(event)
+        except EventDispatchError as error:
+            errors.append(error)
+            return False
+
+        return True
 
     def status(self) -> subprocess.CompletedProcess[str]:
         """
