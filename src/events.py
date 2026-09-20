@@ -1,4 +1,7 @@
-"""Immutable, versioned Career OS business events."""
+"""Immutable, versioned Career OS business events.
+
+See ``docs/events.md`` for the event contract.
+"""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
