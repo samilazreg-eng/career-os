@@ -166,14 +166,13 @@ tree clean.
 python tests/test_core_conformance.py
 ```
 
-Baseline after issue #23: 54 tests, 5 known failures that are not regressions
+Baseline after issue #24: 54 tests, 4 known failures that are not regressions
 and must not be fixed as part of unrelated work:
 
 - `test_context_finish`
 - `test_mission_finish`
 - `test_thread_finish`
 - `test_inconsistent_head_is_rejected_before_capture`
-- `test_sibling_thread_branches_from_structural_parent`
 
 Your change must keep every other test passing and must not add failures.
 

@@ -86,15 +86,17 @@ class Repository(metaclass=Singleton):
     def create_branch(
         self,
         branch_name: str,
+        parent_branch: str,
         workspace_path: str,
     ) -> subprocess.CompletedProcess[str]:
         """
         @brief Create a Git branch and materialize its Career structure.
 
         @param branch_name Git branch name.
+        @param parent_branch Structural parent from which to create the branch.
         @param workspace_path Career path associated with the branch.
         """
-        result = self.git.create_branch(branch_name)
+        result = self.git.create_branch(branch_name, parent_branch)
 
         marker_path = self.working_tree.create_dir(
             workspace_path
