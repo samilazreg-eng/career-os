@@ -91,18 +91,28 @@ class WorkspaceCommitEventsTest(InProcessCareerTestCase):
     def test_events_copy_every_current_head_depth(self):
         recorded = []
         self.subscribe_all(recorded.append)
-        workspace = self.career.main.Career().workspace
         states = (
             ("", "", ""),
             ("snt", "", ""),
             ("snt", "daedalux", ""),
             ("snt", "daedalux", "debugging"),
         )
+        transitions = (
+            None,
+            ("context", "start", "snt"),
+            ("mission", "start", "daedalux"),
+            ("thread", "start", "debugging"),
+        )
 
         for index, (context, mission, thread) in enumerate(states):
-            workspace.head.set_context(context)
-            workspace.head.set_mission(mission)
-            workspace.head.set_thread(thread)
+            transition = transitions[index]
+            if transition is not None:
+                result = self.career.dispatch(*transition)
+                self.assertEqual(
+                    result.returncode,
+                    0,
+                    result.stdout + result.stderr,
+                )
             self.stage(f"resource-{index}.txt")
 
             result = self.career.dispatch("commit", "-m", f"Snapshot {index}")

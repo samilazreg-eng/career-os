@@ -102,6 +102,8 @@ class Workspace:
 
         @param resource_dir Physical path of the resource to capture.
         """
+        self._validate_position()
+
         return self.repo.add(
             resource_dir,
             self.head.path,
@@ -115,6 +117,8 @@ class Workspace:
 
         @param message Description of the capitalization.
         """
+        self._validate_position()
+
         head = HeadSnapshot(
             context=self.head.context,
             mission=self.head.mission,
@@ -211,6 +215,25 @@ class Workspace:
 
         return True
 
+    def _validate_position(self) -> None:
+        """@brief Require the Career Head to match the checked-out branch."""
+        if self.head.thread:
+            expected_branch = self.head.thread_path + "/@thread"
+        elif self.head.mission:
+            expected_branch = self.head.mission_path + "/@mission"
+        elif self.head.context:
+            expected_branch = self.head.context_path + "/@context"
+        else:
+            expected_branch = "@career"
+
+        current_branch = self.repo.current_branch()
+        displayed_branch = current_branch or "<detached HEAD>"
+        if current_branch != expected_branch:
+            raise WorkspaceError(
+                f"Career Head position '{expected_branch}' does not match "
+                f"current branch '{displayed_branch}'."
+            )
+
     def status(self) -> subprocess.CompletedProcess[str]:
         """
         @brief Display the current Career repository status.
@@ -238,6 +261,8 @@ class Workspace:
 
         @return Result of the capitalization commit.
         """
+        self._validate_position()
+
         context_path = self.head.context_path_for(id)
         context_branch = context_path + "/@context"
 
@@ -266,6 +291,8 @@ class Workspace:
 
         @return Result of the repository switch operation.
         """
+        self._validate_position()
+
         context_path = self.head.context_path_for(id)
         context_branch = context_path + "/@context"
 
@@ -287,6 +314,8 @@ class Workspace:
 
         @return Result of the capitalization commit.
         """
+        self._validate_position()
+
         if not self.head.context:
             raise WorkspaceError(
                 "cannot finish a context without an active context."
@@ -328,6 +357,8 @@ class Workspace:
 
         @return Result of the capitalization commit.
         """
+        self._validate_position()
+
         if not self.head.context:
             raise WorkspaceError(
                 "cannot start a mission without an active context."
@@ -363,6 +394,8 @@ class Workspace:
 
         @return Result of the repository switch operation.
         """
+        self._validate_position()
+
         if not self.head.context:
             raise WorkspaceError(
                 "cannot switch to a mission without an active context."
@@ -388,6 +421,8 @@ class Workspace:
 
         @return Result of the capitalization commit.
         """
+        self._validate_position()
+
         if not self.head.mission:
             raise WorkspaceError(
                 "cannot finish a mission without an active mission."
@@ -435,6 +470,8 @@ class Workspace:
 
         @return Result of the capitalization commit.
         """
+        self._validate_position()
+
         if not self.head.mission:
             raise WorkspaceError(
                 "cannot start a thread without an active mission."
@@ -469,6 +506,8 @@ class Workspace:
 
         @return Result of the repository switch operation.
         """
+        self._validate_position()
+
         if not self.head.mission:
             raise WorkspaceError(
                 "cannot switch to a thread without an active mission."
@@ -493,6 +532,8 @@ class Workspace:
 
         @return Result of the capitalization commit.
         """
+        self._validate_position()
+
         if not self.head.thread:
             raise WorkspaceError(
                 "cannot finish a thread without an active thread."
