@@ -33,7 +33,8 @@ class Repository(metaclass=Singleton):
 
         @details
         Creates the physical Career repository directory and initializes
-        Git with '@career' as the root branch.
+        Git with '@career' as the root branch. When HEAD is unborn, creates
+        the empty Career root commit.
 
         @return Result of the Git initialization.
         """
@@ -56,6 +57,9 @@ class Repository(metaclass=Singleton):
                 json.dumps({"context": "", "mission": "", "thread": ""}),
                 encoding="utf-8",
             )
+
+        if not self.git.has_head():
+            self.git.commit_empty("Initialize Career archive")
 
         return result
 
