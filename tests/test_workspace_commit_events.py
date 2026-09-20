@@ -239,9 +239,10 @@ class WorkspaceCommitEventsTest(InProcessCareerTestCase):
             self.bus.subscribe(event_type, fail)
 
         self.stage("committed.txt")
+        workspace = self.career.main.Career().workspace
 
         with self.assertRaises(self.workspace_module.CommitEventsError) as raised:
-            self.career.dispatch("commit", "-m", "Commit despite delivery")
+            workspace.commit("Commit despite delivery")
 
         self.assertEqual(raised.exception.result.returncode, 0)
         self.assertIsInstance(raised.exception, RuntimeError)
@@ -266,9 +267,10 @@ class WorkspaceCommitEventsTest(InProcessCareerTestCase):
 
         self.bus.subscribe("career.commit.reviewed", fail_reviewed)
         self.stage("reviewed.txt")
+        workspace = self.career.main.Career().workspace
 
         with self.assertRaises(self.workspace_module.CommitEventsError) as raised:
-            self.career.dispatch("commit", "-m", "Reviewed failure")
+            workspace.commit("Reviewed failure")
 
         self.assertEqual(raised.exception.result.returncode, 0)
         self.assertEqual(len(raised.exception.errors), 1)

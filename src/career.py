@@ -1,8 +1,57 @@
 from pathlib import Path
 import subprocess
 
+from eventbus import EventDispatchError
 from repository import Repository
-from workspace import Workspace
+from workspace import CommitEventsError, Workspace
+
+
+def _event_delivery_warning(event_type: str, failure: Exception) -> str:
+    """
+    @brief Render one event-delivery warning line.
+
+    @param event_type Type of the event whose handler failed.
+    @param failure Original handler exception.
+
+    @return Warning with the exception message represented as a string literal.
+    """
+    return (
+        f"warning: event delivery failed ({event_type}): "
+        f"{type(failure).__name__}: {str(failure)!r}\n"
+    )
+
+
+class CommitProcess(subprocess.CompletedProcess[str]):
+    """@brief Git commit result enriched with event-delivery warnings."""
+
+    def __init__(
+        self,
+        result: subprocess.CompletedProcess[str],
+        errors: list[EventDispatchError],
+    ):
+        """
+        @brief Preserve a Git result and append ordered delivery warnings.
+
+        @param result Native result returned by the Workspace Git commit.
+        @param errors Event dispatch failures in publication order.
+        """
+        warnings = "".join(
+            _event_delivery_warning(error.event.event_type, failure)
+            for error in errors
+            for _, failure in error.failures
+        )
+        stderr = result.stderr or ""
+        if stderr and not stderr.endswith("\n"):
+            stderr += "\n"
+
+        super().__init__(
+            args=result.args,
+            returncode=result.returncode,
+            stdout=result.stdout,
+            stderr=stderr + warnings,
+        )
+        self.errors: list[EventDispatchError] = list(errors)
+
 
 class Career:
     """
@@ -81,7 +130,10 @@ class Career:
 
         @return Result of the commit operation.
         """
-        return self.workspace.commit(message)
+        try:
+            return self.workspace.commit(message)
+        except CommitEventsError as error:
+            return CommitProcess(error.result, error.errors)
 
     def status(self) -> subprocess.CompletedProcess[str]:
         """
