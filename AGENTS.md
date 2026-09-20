@@ -64,6 +64,65 @@ main.py (CLI parsing, output, exit code)
 - Type-annotate new code, consistent with the existing annotations.
 - Keep changes small and focused on the assigned issue. No general refactoring.
 
+## Code and architecture quality
+
+Quality is a review criterion, not a preference. Reviewers challenge these
+points before they look at the tests; passing tests do not make code
+acceptable.
+
+- **Language and standard library first.** Before writing a helper, check
+  whether Python already does it (`repr`, `dataclasses`, `pathlib`, ...). Never
+  re-implement a standard behaviour by hand. If you hesitate between a bespoke
+  solution and a standard one, use the standard one and say so in the pull
+  request.
+- **Small and simple.** Short functions with a single responsibility. No
+  duplicated blocks: when the same construction appears more than twice,
+  extract a named helper. No speculative abstraction, option or flexibility
+  that the issue does not ask for.
+- **Readable first.** Intention-revealing names. A nested comprehension or
+  generator that needs a comment to be understood becomes a loop or a named
+  function. Comments explain why, not what.
+- **Respect the layers.** Dependencies point downward (`main` → `Career` →
+  `Workspace` → `Repository` → `Git`). Wording and presentation stay in the
+  layer that owns them. Business code does not know the CLI, and `Git` knows
+  nothing about Career. Do not reach across layers.
+- **No extra API surface.** Add only the public functions, parameters and
+  options the issue specifies.
+- **Explicit errors.** No bare `except`, no silently swallowed exception.
+- **Tests protect behaviour.** Every branch you add must be covered by a test
+  that fails when that branch is removed. Delete the tests of code you remove.
+
+## Sequence diagrams for interface changes
+
+When a pull request adds or changes an interface, its description must contain
+a Mermaid `sequenceDiagram`. An interface change is any of:
+
+- a public function or method: signature, return type, or exception raised
+  across a module boundary;
+- a class or `Protocol` used by another module;
+- the observable behaviour of a CLI command (output, `stderr`, exit code);
+- an event type or its schema, or any persisted format.
+
+The diagram shows the participants involved (`main`, `Career`, `Workspace`,
+`Repository`, `Git`, the event bus, ...), the calls with their arguments and
+results, and the alternative branches (`alt` / `else`) for errors and edge
+cases. Mark what is new or changed, and show the previous flow when an existing
+one changes. Keep the diagram up to date when the pull request evolves during
+review. When there is no interface change, write "No interface change." in the
+description. Issues that define a new interface should include a diagram too.
+
+```mermaid
+sequenceDiagram
+    participant Career
+    participant Workspace
+    Career->>Workspace: commit(message)
+    alt Delivery errors collected
+        Workspace--xCareer: CommitEventsError(result, errors)
+    else All deliveries succeeded
+        Workspace-->>Career: CompletedProcess
+    end
+```
+
 ## Development workflow
 
 1. Write the tests first and check that they fail for the right reason.
@@ -73,6 +132,8 @@ main.py (CLI parsing, output, exit code)
    Never commit to `main` directly. Name the branch as described below.
 5. Do not include unrelated changes, and do not modify the assertions of
    `tests/test_core_conformance.py`.
+6. Before asking for review, re-read your diff against "Code and architecture
+   quality", and add the sequence diagram if an interface changed.
 
 ## Branch naming
 
