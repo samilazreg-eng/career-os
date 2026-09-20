@@ -74,6 +74,30 @@ class CareerCommitWarningsTest(InProcessCareerTestCase):
             f"Fail {event_type}",
         )
 
+    def assert_cli_message_rendering(
+        self,
+        message: str,
+        rendered_message: str,
+    ) -> None:
+        failure = ValueError(message)
+
+        def fail(event):
+            raise failure
+
+        self.bus.subscribe("career.commit.initiated", fail)
+        self.stage("escaped-message.txt")
+
+        result = self.career.dispatch("commit", "-m", "Escape warning message")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stderr.count("\n"), 1)
+        self.assertEqual(
+            result.stderr,
+            "warning: event delivery failed (career.commit.initiated): "
+            f"ValueError: {rendered_message}\n",
+        )
+        self.assertEqual(str(failure), message)
+
     def test_initiated_failure_warns_and_keeps_successful_commit(self):
         self.assert_single_failure_warning(
             "career.commit.initiated",
@@ -242,6 +266,75 @@ class CareerCommitWarningsTest(InProcessCareerTestCase):
             "warning: event delivery failed (career.commit.in_review): "
             "RuntimeError: review failed after race\n",
         )
+
+    def test_lf_in_handler_message_is_escaped(self):
+        self.assert_cli_message_rendering(
+            "first\nsecond",
+            "first\\nsecond",
+        )
+
+    def test_cr_in_handler_message_is_escaped(self):
+        self.assert_cli_message_rendering(
+            "first\rsecond",
+            "first\\rsecond",
+        )
+
+    def test_crlf_in_handler_message_is_escaped(self):
+        self.assert_cli_message_rendering(
+            "first\r\nsecond",
+            "first\\r\\nsecond",
+        )
+
+    def test_ansi_control_in_handler_message_is_escaped(self):
+        self.assert_cli_message_rendering(
+            "erase \x1b[2Kdone",
+            "erase \\x1b[2Kdone",
+        )
+
+    def test_unicode_line_separator_in_handler_message_is_escaped(self):
+        self.assert_cli_message_rendering(
+            "first\u2028second",
+            "first\\u2028second",
+        )
+
+    def test_accented_handler_message_characters_remain_unchanged(self):
+        self.assert_cli_message_rendering(
+            "échec\ndéjà",
+            "échec\\ndéjà",
+        )
+
+    def test_git_stderr_control_characters_are_not_escaped(self):
+        failure = ValueError("handler\nfailed")
+
+        def fail(event):
+            raise failure
+
+        self.bus.subscribe("career.commit.initiated", fail)
+        self.stage("raw-git-stderr.txt")
+        career = self.career.main.Career()
+        original_commit = career.workspace.repo.commit
+
+        def commit_with_stderr(message: str) -> subprocess.CompletedProcess[str]:
+            result = original_commit(message)
+            return subprocess.CompletedProcess(
+                result.args,
+                result.returncode,
+                result.stdout,
+                "Git\tstderr\x1b[2K\n",
+            )
+
+        career.workspace.repo.commit = commit_with_stderr
+
+        result = self.career.dispatch("commit", "-m", "Keep Git stderr raw")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stderr,
+            "Git\tstderr\x1b[2K\n"
+            "warning: event delivery failed (career.commit.initiated): "
+            "ValueError: handler\\nfailed\n",
+        )
+        self.assertEqual(str(failure), "handler\nfailed")
 
 
 if __name__ == "__main__":

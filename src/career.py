@@ -6,6 +6,41 @@ from repository import Repository
 from workspace import CommitEventsError, Workspace
 
 
+def _escape_warning_message(message: str) -> str:
+    """
+    @brief Escape non-printable characters for one-line warning output.
+
+    @param message Exception message to render.
+
+    @return Message with every non-printable character escaped.
+    """
+    escaped: list[str] = []
+    named_escapes = {
+        "\n": "\\n",
+        "\r": "\\r",
+        "\t": "\\t",
+    }
+
+    for character in message:
+        if character.isprintable():
+            escaped.append(character)
+            continue
+
+        if character in named_escapes:
+            escaped.append(named_escapes[character])
+            continue
+
+        codepoint = ord(character)
+        if codepoint <= 0xff:
+            escaped.append(f"\\x{codepoint:02x}")
+        elif codepoint <= 0xffff:
+            escaped.append(f"\\u{codepoint:04x}")
+        else:
+            escaped.append(f"\\U{codepoint:08x}")
+
+    return "".join(escaped)
+
+
 class CommitProcess(subprocess.CompletedProcess[str]):
     """@brief Git commit result enriched with event-delivery warnings."""
 
@@ -22,7 +57,8 @@ class CommitProcess(subprocess.CompletedProcess[str]):
         """
         warnings = "".join(
             f"warning: event delivery failed ({error.event.event_type}): "
-            f"{type(failure).__name__}: {failure}\n"
+            f"{type(failure).__name__}: "
+            f"{_escape_warning_message(str(failure))}\n"
             for error in errors
             for _, failure in error.failures
         )
