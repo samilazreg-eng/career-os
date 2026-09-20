@@ -153,7 +153,7 @@ class WorkspaceCommitEventsTest(InProcessCareerTestCase):
         self.assertIn("no changes added to commit", result.stdout)
         self.assertEqual(recorded, [])
 
-    def test_race_to_no_staged_changes_stops_after_review_started(self):
+    def test_race_to_no_staged_changes_returns_result_and_drops_delivery_errors(self):
         recorded = []
         self.subscribe_all(recorded.append)
         self.stage("raced.txt")
@@ -161,7 +161,11 @@ class WorkspaceCommitEventsTest(InProcessCareerTestCase):
         def unstage(event):
             self.git_ok("reset", "HEAD", "--", "raced.txt")
 
+        def fail_delivery(event):
+            raise ValueError("delivery failed before raced commit")
+
         self.bus.subscribe("career.commit.initiated", unstage)
+        self.bus.subscribe("career.commit.in_review", fail_delivery)
 
         result = self.career.dispatch("commit", "-m", "Raced commit")
 
