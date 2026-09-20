@@ -146,6 +146,8 @@ class Workspace:
 
         result = self.repo.commit(message)
         if result.returncode != 0:
+            if errors:
+                raise CommitEventsError(result, errors)
             return result
 
         revision = self.repo.head_revision()

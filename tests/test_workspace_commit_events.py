@@ -153,23 +153,52 @@ class WorkspaceCommitEventsTest(InProcessCareerTestCase):
         self.assertIn("no changes added to commit", result.stdout)
         self.assertEqual(recorded, [])
 
-    def test_race_to_no_staged_changes_returns_result_and_drops_delivery_errors(self):
+    def test_race_to_no_staged_changes_returns_git_result(self):
         recorded = []
         self.subscribe_all(recorded.append)
-        self.stage("raced.txt")
+        raced = self.stage("raced.txt")
 
         def unstage(event):
             self.git_ok("reset", "HEAD", "--", "raced.txt")
+            raced.unlink()
+
+        self.bus.subscribe("career.commit.initiated", unstage)
+
+        result = self.career.dispatch("commit", "-m", "Raced commit")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("nothing to commit", result.stdout)
+        self.assertEqual(
+            [event.event_type for event in recorded],
+            ["career.commit.initiated", "career.commit.in_review"],
+        )
+
+    def test_race_to_no_staged_changes_aggregates_delivery_errors(self):
+        recorded = []
+        self.subscribe_all(recorded.append)
+        raced = self.stage("raced-with-delivery-error.txt")
+
+        def unstage(event):
+            self.git_ok("reset", "HEAD", "--", "raced-with-delivery-error.txt")
+            raced.unlink()
 
         def fail_delivery(event):
             raise ValueError("delivery failed before raced commit")
 
         self.bus.subscribe("career.commit.initiated", unstage)
         self.bus.subscribe("career.commit.in_review", fail_delivery)
+        workspace = self.career.main.Career().workspace
 
-        result = self.career.dispatch("commit", "-m", "Raced commit")
+        with self.assertRaises(self.workspace_module.CommitEventsError) as raised:
+            workspace.commit("Raced commit with delivery failure")
 
-        self.assertEqual(result.returncode, 1)
+        self.assertEqual(raised.exception.result.returncode, 1)
+        self.assertIn("nothing to commit", raised.exception.result.stdout)
+        self.assertEqual(len(raised.exception.errors), 1)
+        self.assertEqual(
+            raised.exception.errors[0].event.event_type,
+            "career.commit.in_review",
+        )
         self.assertEqual(
             [event.event_type for event in recorded],
             ["career.commit.initiated", "career.commit.in_review"],
