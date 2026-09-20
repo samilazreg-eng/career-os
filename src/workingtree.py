@@ -226,35 +226,31 @@ class WorkingTree:
 
         return marker_path.as_posix()
 
-    def remove_dir(self, path_name: str) -> bool:
+    def remove_marker(self, path_name: str) -> str:
         """
-        @brief Remove a materialized Career directory.
+        @brief Remove a Career scope marker and its directory if empty.
 
-        @param path_name Repository-relative Career path to remove.
+        @param path_name Repository-relative Career path whose marker is removed.
 
-        @return True if a directory was actually removed, False if it was
-                already absent (e.g. never materialized on this branch).
+        @return Repository-relative path of the removed marker file.
         """
         target_dir = self.resolve_dir(path_name)
-        repo_dir = self.repo_dir.resolve()
-
-        if target_dir == repo_dir or target_dir == repo_dir / ".git":
-            raise WorkingTreeError(
-                f"refusing to remove the protected path '{target_dir}'"
-            )
-
-        if not target_dir.exists():
-            return False
+        marker = target_dir / self.MARKER_NAME
 
         try:
-            shutil.rmtree(target_dir)
+            marker.unlink()
+            if not any(target_dir.iterdir()):
+                target_dir.rmdir()
         except OSError as error:
             raise WorkingTreeError(
                 message=(
-                    f"cannot remove directory '{target_dir}': "
+                    f"cannot remove scope marker '{marker}': "
                     f"{error.strerror or str(error)}"
                 ),
                 cause=error,
             ) from error
 
-        return True
+        return (
+            PurePosixPath(path_name)
+            / self.MARKER_NAME
+        ).as_posix()

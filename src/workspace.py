@@ -234,6 +234,27 @@ class Workspace:
                 f"current branch '{displayed_branch}'."
             )
 
+    def _finish_scope(
+        self,
+        kind: str,
+        identifier: str,
+        path: str,
+        parent_branch: str,
+    ) -> subprocess.CompletedProcess[str]:
+        """@brief Merge one finished scope into its structural parent."""
+        if self.repo.has_staged_changes():
+            raise WorkspaceError(
+                "cannot finish with staged changes; commit or unstage them first."
+            )
+
+        branch = path + f"/@{kind}"
+        return self.repo.finish_branch(
+            branch,
+            parent_branch,
+            path,
+            f"Finish {kind} {identifier}",
+        )
+
     def status(self) -> subprocess.CompletedProcess[str]:
         """
         @brief Display the current Career repository status.
@@ -322,18 +343,11 @@ class Workspace:
             )
         
         context_id = self.head.context
-        context_path = self.head.context_path
-        context_branch = context_path + "/@context"
-
-        self.repo.switch_branch("@career")
-
-        self.repo.remove_branch(
-            context_branch,
-            context_path,
-        )
-
-        result = self.repo.commit(
-            f"Finish context {context_id}"
+        result = self._finish_scope(
+            "context",
+            context_id,
+            self.head.context_path,
+            "@career",
         )
 
         self.head.set_context("")
@@ -429,25 +443,15 @@ class Workspace:
             )
 
         mission_id = self.head.mission
-        mission_path = self.head.mission_path
-        mission_branch = mission_path + "/@mission"
-
-        context_branch = (
+        parent_branch = (
             self.head.context_path
             + "/@context"
         )
-
-        self.repo.switch_branch(
-            context_branch
-        )
-
-        self.repo.remove_branch(
-            mission_branch,
-            mission_path,
-        )
-
-        result = self.repo.commit(
-            f"Finish mission {mission_id}"
+        result = self._finish_scope(
+            "mission",
+            mission_id,
+            self.head.mission_path,
+            parent_branch,
         )
 
         self.head.set_mission("")
@@ -540,25 +544,15 @@ class Workspace:
             )
 
         thread_id = self.head.thread
-        thread_path = self.head.thread_path
-        thread_branch = thread_path + "/@thread"
-
-        mission_branch = (
+        parent_branch = (
             self.head.mission_path
             + "/@mission"
         )
-
-        self.repo.switch_branch(
-            mission_branch
-        )
-
-        self.repo.remove_branch(
-            thread_branch,
-            thread_path,
-        )
-
-        result = self.repo.commit(
-            f"Finish thread {thread_id}"
+        result = self._finish_scope(
+            "thread",
+            thread_id,
+            self.head.thread_path,
+            parent_branch,
         )
 
         self.head.set_thread("")

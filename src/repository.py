@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 import subprocess
 from template.singleton import Singleton
+from error import CareerError
 from git import Git
 from workingtree import WorkingTree
 from paths import REPO_DIR, HEAD_FILE
@@ -122,18 +123,57 @@ class Repository(metaclass=Singleton):
         """
         return self.git.current_branch()
 
-    def remove_branch(self, branch_name: str, branch_path: str) -> subprocess.CompletedProcess[str]:
+    def finish_branch(
+        self,
+        branch_name: str,
+        parent_branch: str,
+        branch_path: str,
+        message: str,
+    ) -> subprocess.CompletedProcess[str]:
         """
-        @brief Remove a Git branch from the repository.
+        @brief Merge a finished Career branch into its parent and remove it.
 
-        @param branch_name Git branch name to remove.
+        @param branch_name Finished Git branch name.
+        @param parent_branch Structural parent branch receiving the history.
+        @param branch_path Career path whose scope marker is removed.
+        @param message Message for the resulting merge commit.
+
+        @return Result of the merge commit.
         """
-        removed = self.working_tree.remove_dir(branch_path)
+        self.git.switch_branch(parent_branch)
+        parent_revision = self.git.head_revision()
+        merge_committed = False
 
-        if removed:
-            self.git.add(branch_path)
+        try:
+            self.git.merge_branch(branch_name)
+            marker_path = self.working_tree.remove_marker(branch_path)
+            self.git.add(marker_path)
+            result = self.git.commit_empty(message)
+            merge_committed = True
+            self.git.remove_branch(branch_name)
+        except CareerError:
+            self._restore_finished_branch(
+                branch_name,
+                parent_revision,
+                merge_committed,
+            )
+            raise
 
-        return self.git.remove_branch(branch_name)
+        return result
+
+    def _restore_finished_branch(
+        self,
+        branch_name: str,
+        parent_revision: str,
+        merge_committed: bool,
+    ) -> None:
+        """@brief Restore repository state after a failed finish operation."""
+        if self.git.merge_in_progress():
+            self.git.abort_merge()
+        elif merge_committed:
+            self.git.reset_merge(parent_revision)
+
+        self.git.switch_branch(branch_name)
 
     def commit(self, message: str) -> subprocess.CompletedProcess[str]:
         """

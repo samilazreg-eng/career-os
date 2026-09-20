@@ -166,14 +166,8 @@ tree clean.
 python tests/test_core_conformance.py
 ```
 
-Baseline after issue #25: 54 tests, 3 known failures that are not regressions
-and must not be fixed as part of unrelated work:
-
-- `test_context_finish`
-- `test_mission_finish`
-- `test_thread_finish`
-
-Your change must keep every other test passing and must not add failures.
+Baseline after issue #26: 54 tests with no known failures. Any conformance
+failure is a regression.
 
 ## Pitfalls
 
