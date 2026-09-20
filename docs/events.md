@@ -13,6 +13,91 @@ For a commit with staged changes, the successful lifecycle is:
 initiated → in_review → [git commit] → reviewed → completed
 ```
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Career
+    participant Workspace
+    participant Head
+    participant Repository
+    participant Git
+    participant Bus as EventBus
+    participant Handlers
+
+    Career->>Workspace: commit(message)
+    Workspace->>Head: snapshot context / mission / thread
+    Head-->>Workspace: immutable Head copy
+    Workspace->>Repository: has_staged_changes()
+    Repository->>Git: diff --cached --quiet
+    Git-->>Repository: staged-change status
+    Repository-->>Workspace: staged changes?
+
+    alt No staged changes
+        Workspace->>Repository: commit(message)
+        Repository->>Git: commit(message)
+        Git-->>Repository: native result (nothing to commit)
+        Repository-->>Workspace: result
+        Workspace-->>Career: result, with no events
+    else Staged changes exist
+        Workspace->>Bus: publish initiated
+        Bus->>Handlers: deliver synchronously
+        Handlers-->>Bus: successes and failures
+        Bus-->>Workspace: success or aggregate error
+        Note over Workspace: Collect delivery errors and continue
+
+        Workspace->>Bus: publish in_review
+        Bus->>Handlers: deliver synchronously
+        Handlers-->>Bus: successes and failures
+        Bus-->>Workspace: success or aggregate error
+        Note over Workspace: Collect delivery errors and continue
+
+        Workspace->>Repository: commit(message)
+        Repository->>Git: commit(message)
+
+        alt Git raises
+            Git--xRepository: GitError
+            Repository--xWorkspace: GitError
+            Workspace--xCareer: propagate GitError
+        else Git returns a non-zero result
+            Git-->>Repository: native result
+            Repository-->>Workspace: result
+            Note over Workspace: Do not publish reviewed or completed
+            alt Delivery errors were collected
+                Workspace--xCareer: CommitEventsError(result, errors)
+            else No delivery errors
+                Workspace-->>Career: native result
+            end
+        else Commit succeeds
+            Git-->>Repository: result (return code 0)
+            Repository-->>Workspace: result
+            Workspace->>Repository: head_revision()
+            Repository->>Git: rev-parse HEAD
+            Git-->>Repository: full revision
+            Repository-->>Workspace: full revision
+
+            Workspace->>Bus: publish reviewed(revision)
+            Bus->>Handlers: deliver synchronously
+            Handlers-->>Bus: successes and failures
+            Bus-->>Workspace: success or aggregate error
+
+            alt Reviewed delivery succeeds
+                Workspace->>Bus: publish completed(revision)
+                Bus->>Handlers: deliver synchronously
+                Handlers-->>Bus: successes and failures
+                Bus-->>Workspace: success or aggregate error
+            else Reviewed delivery fails
+                Note over Workspace: Collect the error and do not publish completed
+            end
+
+            alt Delivery errors were collected
+                Workspace--xCareer: CommitEventsError(result, ordered errors)
+            else All deliveries succeeded
+                Workspace-->>Career: native result
+            end
+        end
+    end
+```
+
 | Event | Meaning | Intended future service boundary |
 | --- | --- | --- |
 | `career.commit.initiated` | A public commit operation has begun and passed the initial staged-change check. | Future services may suggest or recommend changes to the staged modifications. |
@@ -36,7 +121,7 @@ JSON-compatible and contains these common fields:
 | `event_id` | A UUID string unique to this event. Each event in an operation has a different ID. |
 | `operation_id` | A UUID string shared by all events from the same commit operation. |
 | `event_type` | One of the four exact event names catalogued below. |
-| `occurred_at` | A timezone-aware UTC ISO 8601 timestamp with whole-second precision. Timestamps within an operation are nondecreasing. |
+| `occurred_at` | A timezone-aware UTC ISO 8601 timestamp obtained from the system clock with whole-second precision. Its monotonicity is not guaranteed. |
 | `head` | The immutable workspace snapshot captured for the operation, with exactly `context`, `mission`, and `thread` string fields. An absent level is represented by an empty string. |
 
 Only `career.commit.reviewed` and `career.commit.completed` contain
@@ -149,7 +234,9 @@ A delivery failure never rolls back a Git commit. Failed `initiated` or
 phases. Failed `reviewed` delivery suppresses `completed`; failed `completed`
 delivery occurs after the commit already exists.
 
-The `Career` layer converts each delivery failure into one stderr warning:
+The `Career` layer converts every failing handler reported by delivery into one
+stderr warning. An event with several failing handlers produces several
+warnings, in handler call order:
 
 ```text
 warning: event delivery failed (<event_type>): <ExceptionType>: <message-repr>
@@ -176,8 +263,10 @@ the commit result.
   it never retains a reference to the mutable singleton.
 - All events in one operation share an `operation_id`, while every event has a
   distinct `event_id`.
-- Event timestamps are UTC, have whole-second precision, and are nondecreasing
-  within an operation.
+- Events within an operation are published in lifecycle order: `initiated`,
+  `in_review`, `reviewed`, then `completed` when the sequence reaches it.
+- `occurred_at` is read from the system clock in UTC with whole-second
+  precision; timestamp monotonicity is not guaranteed.
 - Events contain no free-form payload or non-essential personal data.
 
 ## Version 1 limitations
