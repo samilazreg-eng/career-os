@@ -2,7 +2,8 @@ from pathlib import Path
 import json
 import subprocess
 from template.singleton import Singleton
-from git import Git, GitError
+from error import CareerError
+from git import Git
 from workingtree import WorkingTree
 from paths import REPO_DIR, HEAD_FILE
 
@@ -140,21 +141,39 @@ class Repository(metaclass=Singleton):
         @return Result of the merge commit.
         """
         self.git.switch_branch(parent_branch)
+        parent_revision = self.git.head_revision()
+        merge_committed = False
 
         try:
             self.git.merge_branch(branch_name)
-        except GitError:
-            if self.git.merge_in_progress():
-                self.git.abort_merge()
-            self.git.switch_branch(branch_name)
+            marker_path = self.working_tree.remove_marker(branch_path)
+            self.git.add(marker_path)
+            result = self.git.commit_empty(message)
+            merge_committed = True
+            self.git.remove_branch(branch_name)
+        except CareerError:
+            self._restore_finished_branch(
+                branch_name,
+                parent_revision,
+                merge_committed,
+            )
             raise
 
-        marker_path = self.working_tree.remove_marker(branch_path)
-        self.git.add(marker_path)
-        result = self.git.commit_empty(message)
-        self.git.remove_branch(branch_name)
-
         return result
+
+    def _restore_finished_branch(
+        self,
+        branch_name: str,
+        parent_revision: str,
+        merge_committed: bool,
+    ) -> None:
+        """@brief Restore repository state after a failed finish operation."""
+        if self.git.merge_in_progress():
+            self.git.abort_merge()
+        elif merge_committed:
+            self.git.reset_merge(parent_revision)
+
+        self.git.switch_branch(branch_name)
 
     def commit(self, message: str) -> subprocess.CompletedProcess[str]:
         """

@@ -265,6 +265,16 @@ class Git:
         )
         return result.returncode == 0
 
+    def reset_merge(self, revision: str) -> subprocess.CompletedProcess[str]:
+        """
+        @brief Reset a branch while preserving unrelated working-tree changes.
+
+        @param revision Revision to which the current branch is restored.
+
+        @return Native Git reset result.
+        """
+        return self._run("reset", "--merge", revision)
+
     def remove_branch(
         self,
         name: str,

@@ -1,12 +1,10 @@
 """Real-Git CLI tests for merging finished structural scopes."""
 
-import importlib
 import json
 import os
 import subprocess
 import sys
 import unittest
-from unittest.mock import patch
 
 from inprocess_harness import InProcessCareer, SOURCE
 
@@ -91,6 +89,24 @@ class FinishMergeTest(unittest.TestCase):
     def revision(self, career: InProcessCareer, name: str = "HEAD") -> str:
         """@brief Resolve one Git revision to its full object name."""
         return self.git_ok(career, "rev-parse", name).stdout.strip()
+
+    def write_hook(self, career: InProcessCareer, name: str, script: str) -> None:
+        """@brief Install one executable Git hook in an isolated archive."""
+        hook = career.repo / ".git" / "hooks" / name
+        hook.write_bytes(script.encode("utf-8"))
+        hook.chmod(0o755)
+
+    def assert_no_merge(self, career: InProcessCareer) -> None:
+        """@brief Require that the isolated repository has no MERGE_HEAD."""
+        self.assertEqual(
+            career.git(
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                "MERGE_HEAD",
+            ).returncode,
+            1,
+        )
 
     def repository_files(self, career: InProcessCareer) -> dict[str, bytes]:
         """@brief Snapshot all non-Git files in the Career archive."""
@@ -243,7 +259,7 @@ class FinishMergeTest(unittest.TestCase):
                 ).stdout.split()
                 self.assertEqual(len(merge_line), 3)
 
-    def test_failure_before_merge_state_restores_original_branch_and_error(self):
+    def test_unsigned_merge_refusal_restores_original_state_and_error(self):
         with InProcessCareer() as career:
             self.initialize_scope(
                 career,
@@ -251,28 +267,96 @@ class FinishMergeTest(unittest.TestCase):
                 "debugging",
                 (("context", "snt"), ("mission", "daedalux")),
             )
+            self.git_ok(career, "config", "merge.verifySignatures", "true")
             before = self.repository_state(career)
-            git_error_type = importlib.import_module("git").GitError
-            merge_error = git_error_type(
-                subprocess.CompletedProcess(
-                    args=["git", "merge"],
-                    returncode=128,
-                    stdout="",
-                    stderr="fatal: merge stopped before creating merge state",
-                )
-            )
-            repository_git = career.main.Career().workspace.repo.git
 
-            with patch.object(
-                repository_git,
-                "merge_branch",
-                side_effect=merge_error,
-            ):
-                with self.assertRaises(git_error_type) as raised:
-                    career.dispatch("thread", "finish")
+            result = self.cli(career, "thread", "finish")
 
-            self.assertIs(raised.exception, merge_error)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("signature", result.stderr.lower())
             self.assertEqual(self.repository_state(career), before)
+            self.assert_no_merge(career)
+
+    def test_staged_changes_are_refused_before_finish_changes_anything(self):
+        with InProcessCareer() as career:
+            self.initialize_scope(
+                career,
+                "thread",
+                "debugging",
+                (("context", "snt"), ("mission", "daedalux")),
+            )
+            source = career.cwd / "staged.txt"
+            source.write_text("not committed\n", encoding="utf-8")
+            self.dispatch_ok(career, "add", source.name)
+            before = self.repository_state(career)
+
+            result = self.cli(career, "thread", "finish")
+
+            self.assertEqual(result.returncode, 128)
+            self.assertTrue(result.stderr.startswith("fatal:"), result.stderr)
+            self.assertIn("commit or unstage", result.stderr)
+            self.assertEqual(self.repository_state(career), before)
+            self.assert_no_merge(career)
+
+    def test_rejected_merge_commit_restores_original_state_and_hook_error(self):
+        with InProcessCareer() as career:
+            self.initialize_scope(
+                career,
+                "thread",
+                "debugging",
+                (("context", "snt"), ("mission", "daedalux")),
+            )
+            self.write_hook(
+                career,
+                "pre-commit",
+                "#!/bin/sh\n"
+                "echo 'finish commit rejected by hook' >&2\n"
+                "exit 1\n",
+            )
+            before = self.repository_state(career)
+
+            result = self.cli(career, "thread", "finish")
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("finish commit rejected by hook", result.stderr)
+            self.assertEqual(self.repository_state(career), before)
+            self.assert_no_merge(career)
+
+    def test_rejected_branch_deletion_restores_parent_and_finished_branch(self):
+        with InProcessCareer() as career:
+            self.initialize_scope(
+                career,
+                "thread",
+                "debugging",
+                (("context", "snt"), ("mission", "daedalux")),
+            )
+            branch = "snt/daedalux/debugging/@thread"
+            self.write_hook(
+                career,
+                "reference-transaction",
+                "#!/bin/sh\n"
+                "if [ \"$1\" = \"prepared\" ]; then\n"
+                "    while read old new ref; do\n"
+                f"        if [ \"$ref\" = \"refs/heads/{branch}\" ]; then\n"
+                "            case \"$new\" in\n"
+                "                000000*)\n"
+                "                    echo 'finish branch deletion rejected by hook' >&2\n"
+                "                    exit 1\n"
+                "                    ;;\n"
+                "            esac\n"
+                "        fi\n"
+                "    done\n"
+                "fi\n"
+                "exit 0\n",
+            )
+            before = self.repository_state(career)
+
+            result = self.cli(career, "thread", "finish")
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("finish branch deletion rejected by hook", result.stderr)
+            self.assertEqual(self.repository_state(career), before)
+            self.assert_no_merge(career)
 
     def test_merge_conflict_restores_every_scope_without_changes(self):
         for kind, identifier, parents, _path, branch, parent, _head in SCOPE_CASES:

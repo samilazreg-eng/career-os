@@ -242,6 +242,11 @@ class Workspace:
         parent_branch: str,
     ) -> subprocess.CompletedProcess[str]:
         """@brief Merge one finished scope into its structural parent."""
+        if self.repo.has_staged_changes():
+            raise WorkspaceError(
+                "cannot finish with staged changes; commit or unstage them first."
+            )
+
         branch = path + f"/@{kind}"
         return self.repo.finish_branch(
             branch,
