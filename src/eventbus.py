@@ -1,4 +1,7 @@
-"""Synchronous in-memory publishing for Career events."""
+"""Synchronous in-memory publishing for Career events.
+
+See ``docs/events.md`` for the event contract.
+"""
 
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable

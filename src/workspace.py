@@ -111,6 +111,8 @@ class Workspace:
         """
         @brief Capitalize the currently staged Career resources.
 
+        See ``docs/events.md`` for the event publication contract.
+
         @param message Description of the capitalization.
         """
         head = HeadSnapshot(
