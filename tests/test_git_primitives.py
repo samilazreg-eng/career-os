@@ -68,6 +68,45 @@ class GitPrimitivesTest(InProcessCareerTestCase):
 
         self.assertTrue(self.git.has_staged_changes())
 
+    def test_unstaged_modification_is_not_reported_as_staged(self):
+        resource = self.career.repo / "tracked.txt"
+        resource.write_text("before\n", encoding="utf-8")
+        self.stage(resource)
+        self.commit("Track resource")
+
+        resource.write_text("after\n", encoding="utf-8")
+
+        self.assertFalse(self.git.has_staged_changes())
+        self.assertFalse(self.repository.has_staged_changes())
+
+    def test_untracked_file_is_not_reported_as_staged(self):
+        untracked = self.career.repo / "untracked.txt"
+        untracked.write_text("untracked\n", encoding="utf-8")
+
+        self.assertFalse(self.git.has_staged_changes())
+        self.assertFalse(self.repository.has_staged_changes())
+
+    def test_staged_change_wins_only_while_it_remains_staged(self):
+        tracked = self.career.repo / "tracked.txt"
+        tracked.write_text("before\n", encoding="utf-8")
+        self.stage(tracked)
+        self.commit("Track resource")
+
+        tracked.write_text("unstaged modification\n", encoding="utf-8")
+        untracked = self.career.repo / "untracked.txt"
+        untracked.write_text("untracked\n", encoding="utf-8")
+        staged = self.career.repo / "staged.txt"
+        staged.write_text("staged\n", encoding="utf-8")
+        self.stage(staged)
+
+        self.assertTrue(self.git.has_staged_changes())
+        self.assertTrue(self.repository.has_staged_changes())
+
+        self.commit("Commit staged resource")
+
+        self.assertFalse(self.git.has_staged_changes())
+        self.assertFalse(self.repository.has_staged_changes())
+
     def test_head_revision_matches_git_and_changes_after_commit(self):
         first = self.commit("First", allow_empty=True)
 
