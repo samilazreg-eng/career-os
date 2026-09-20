@@ -114,6 +114,14 @@ class Repository(metaclass=Singleton):
         """
         return self.git.switch_branch(branch_name)
 
+    def current_branch(self) -> str:
+        """
+        @brief Return the currently checked-out Git branch name.
+
+        @return Branch name, or an empty string when HEAD is detached.
+        """
+        return self.git.current_branch()
+
     def remove_branch(self, branch_name: str, branch_path: str) -> subprocess.CompletedProcess[str]:
         """
         @brief Remove a Git branch from the repository.
